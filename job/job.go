@@ -119,12 +119,12 @@ type RemoteProperties struct {
 }
 
 type Metadata struct {
-	SuccessCount     	uint      `json:"success_count"`
-	LastSuccess      	time.Time `json:"last_success"`
-	ErrorCount       	uint      `json:"error_count"`
-	LastError        	time.Time `json:"last_error"`
-	LastAttemptedRun 	time.Time `json:"last_attempted_run"`
-	NumberOfFinishedRuns	uint	  `json:"number_of_finished_runs"`
+	SuccessCount         uint      `json:"success_count"`
+	LastSuccess          time.Time `json:"last_success"`
+	ErrorCount           uint      `json:"error_count"`
+	LastError            time.Time `json:"last_error"`
+	LastAttemptedRun     time.Time `json:"last_attempted_run"`
+	NumberOfFinishedRuns uint      `json:"number_of_finished_runs"`
 }
 
 // Bytes returns the byte representation of the Job.
@@ -416,7 +416,7 @@ func (j *Job) DeleteFromDependentJobs(cache JobCache) error {
 // Runs the on failure job, if it exists. Does not lock the parent job - it is up to you to do this
 // however you want
 func (j *Job) RunOnFailureJob(cache JobCache) {
-	if (j.OnFailureJob != "") {
+	if j.OnFailureJob != "" {
 		onFailureJob, cacheErr := cache.Get(j.OnFailureJob)
 		if cacheErr == ErrJobDoesntExist {
 			log.Errorf("Error retrieving dependent job with id of %s", j.OnFailureJob)
@@ -468,7 +468,9 @@ func (j *Job) RunCmd() error {
 	defer j.lock.RUnlock()
 
 	jobRunner := &JobRunner{job: j}
-	return jobRunner.runCmd()
+	output, err := jobRunner.runCmd()
+	log.Info("output", output)
+	return err
 }
 
 func (j *Job) hasFixedRepetitions() bool {
