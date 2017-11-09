@@ -73,6 +73,10 @@ func (j *JobRunner) Run(cache JobCache) (*JobStat, Metadata, error) {
 			j.collectStats(false)
 			j.meta.NumberOfFinishedRuns++
 
+			if err.Error() == "Run timeout" {
+				j.currentStat.Output = string(output)
+			}
+
 			// TODO: Wrap error into something better.
 			return j.currentStat, j.meta, err
 		} else {
@@ -159,6 +163,7 @@ func initShParser() *shellwords.Parser {
 }
 
 func (j *JobRunner) runCmd() (output []byte, err error) {
+	timeout := j.localResponseTimeout()
 	j.numberOfAttempts++
 
 	// Execute command
@@ -171,9 +176,9 @@ func (j *JobRunner) runCmd() (output []byte, err error) {
 		return nil, ErrCmdIsEmpty
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	out, err := cmd.CombinedOutput()
+	out, err := CombinedOutputWithTimeout(cmd, timeout)
 	if err != nil {
-		return out, errors.Wrap(err, "cmd.CombinedOutput")
+		return out, err
 	}
 	return out, nil
 }
@@ -237,6 +242,16 @@ func (j *JobRunner) responseTimeout() time.Duration {
 	return time.Duration(responseTimeout) * time.Second
 }
 
+func (j *JobRunner) localResponseTimeout() time.Duration {
+	localResponseTimeout := j.job.Timeout
+	if localResponseTimeout == 0 {
+
+		// set default to 30 seconds
+		localResponseTimeout = 30
+	}
+	return time.Duration(localResponseTimeout) * time.Second
+}
+
 // setHeaders sets default and user specific headers to the http request
 func (j *JobRunner) setHeaders(req *http.Request) {
 	// A valid assumption is that the user is sending something in json cause we're past 2017
@@ -251,4 +266,39 @@ func (j *JobRunner) setHeaders(req *http.Request) {
 	} else {
 		req.Header = j.job.RemoteProperties.Headers
 	}
+}
+
+func CombinedOutputWithTimeout(cmd *exec.Cmd, timeout time.Duration) ([]byte, error) {
+	if cmd.Stdout != nil {
+		return nil, errors.New("exec: Stdout already set")
+	}
+	if cmd.Stderr != nil {
+		return nil, errors.New("exec: Stderr already set")
+	}
+	var b bytes.Buffer
+	cmd.Stdout = &b
+	cmd.Stderr = &b
+	cmd.Start()
+	done := make(chan error)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	var err error
+	select {
+	case <-time.After(timeout):
+		// timeout
+		if err = cmd.Process.Kill(); err != nil {
+			log.Error("failed to kill: %s, error: %s", cmd.Path, err)
+		}
+		go func() {
+			<-done // allow goroutine to exit
+		}()
+		log.Info("process:%s killed", cmd.Path)
+		err = errors.New("Run timeout")
+		return []byte("Run timeout"), err
+	case err = <-done:
+		return b.Bytes(), err
+	}
+	return b.Bytes(), err
 }

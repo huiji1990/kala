@@ -35,6 +35,7 @@ type Job struct {
 	// Command to run
 	// e.g. "bash /path/to/my/script.sh"
 	Command string `json:"command"`
+	Timeout int    `json:"timeout"`
 
 	// Email of the owner of this job
 	// e.g. "admin@example.com"
