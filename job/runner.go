@@ -73,10 +73,7 @@ func (j *JobRunner) Run(cache JobCache) (*JobStat, Metadata, error) {
 			j.collectStats(false)
 			j.meta.NumberOfFinishedRuns++
 
-			if err.Error() == "Run timeout" {
-				j.currentStat.Output = string(output)
-			}
-
+			j.currentStat.Output = string(output)
 			// TODO: Wrap error into something better.
 			return j.currentStat, j.meta, err
 		} else {
@@ -275,16 +272,18 @@ func CombinedOutputWithTimeout(cmd *exec.Cmd, timeout time.Duration) ([]byte, er
 	if cmd.Stderr != nil {
 		return nil, errors.New("exec: Stderr already set")
 	}
+	var err error
 	var b bytes.Buffer
 	cmd.Stdout = &b
 	cmd.Stderr = &b
-	cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return []byte(err.Error()), err
+	}
 	done := make(chan error)
 	go func() {
 		done <- cmd.Wait()
 	}()
 
-	var err error
 	select {
 	case <-time.After(timeout):
 		// timeout
