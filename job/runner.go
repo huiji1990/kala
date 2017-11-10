@@ -160,7 +160,8 @@ func initShParser() *shellwords.Parser {
 }
 
 func (j *JobRunner) runCmd() (output []byte, err error) {
-	timeout := j.localResponseTimeout()
+	localResponseTimeout := j.job.Timeout
+	timeout := time.Duration(localResponseTimeout) * time.Second
 	j.numberOfAttempts++
 
 	// Execute command
@@ -173,11 +174,13 @@ func (j *JobRunner) runCmd() (output []byte, err error) {
 		return nil, ErrCmdIsEmpty
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	out, err := CombinedOutputWithTimeout(cmd, timeout)
-	if err != nil {
-		return out, err
+	if timeout == time.Duration(0) {
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return out, err
+		}
 	}
-	return out, nil
+	out, err := CombinedOutputWithTimeout(cmd, timeout)
+	return out, err
 }
 
 func (j *JobRunner) shouldRetry() bool {
@@ -237,16 +240,6 @@ func (j *JobRunner) responseTimeout() time.Duration {
 		responseTimeout = 30
 	}
 	return time.Duration(responseTimeout) * time.Second
-}
-
-func (j *JobRunner) localResponseTimeout() time.Duration {
-	localResponseTimeout := j.job.Timeout
-	if localResponseTimeout == 0 {
-
-		// set default to 30 seconds
-		localResponseTimeout = 30
-	}
-	return time.Duration(localResponseTimeout) * time.Second
 }
 
 // setHeaders sets default and user specific headers to the http request
