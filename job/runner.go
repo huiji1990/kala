@@ -174,11 +174,6 @@ func (j *JobRunner) runCmd() (output []byte, err error) {
 		return nil, ErrCmdIsEmpty
 	}
 	cmd := exec.Command(args[0], args[1:]...)
-	if timeout == time.Duration(0) {
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return out, err
-		}
-	}
 	out, err := CombinedOutputWithTimeout(cmd, timeout)
 	return out, err
 }
@@ -271,6 +266,10 @@ func CombinedOutputWithTimeout(cmd *exec.Cmd, timeout time.Duration) ([]byte, er
 	cmd.Stderr = &b
 	if err := cmd.Start(); err != nil {
 		return []byte(err.Error()), err
+	}
+	if timeout == time.Duration(0) {
+		err := cmd.Wait()
+		return b.Bytes(), err
 	}
 	done := make(chan error)
 	go func() {
